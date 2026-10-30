@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COS30045 Data Visualisation Dashboard</title>
+    <!-- Google Fonts & D3.js v7 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-card: #1e293b;
+            --accent-green: #10b981;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            padding: 30px 40px;
+            min-height: 100vh;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header-title h1 {
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .status-badge {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--accent-green);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 24px;
+        }
+
+        .chart-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .chart-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .chart-card h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-card h3::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-green);
+        }
+
+        .chart-container {
+            width: 100%;
+            position: relative;
+        }
+
+        svg {
+            width: 100%;
+            height: auto;
+            overflow: visible;
+        }
+
+        /* D3 Axis & Grid Styling */
+        .axis text {
+            fill: var(--text-muted);
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+        }
+
+        .axis line, .axis path {
+            stroke: var(--border-color);
+        }
+
+        .grid-line {
+            stroke: rgba(255, 255, 255, 0.04);
+            stroke-dasharray: 4,4;
+        }
+
+        /* Tooltip */
+        .d3-tooltip {
+            position: absolute;
+            padding: 8px 12px;
+            background: #0f172a;
+            color: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5);
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-title">
+            <h1>TV Power Consumption & Market Dashboard</h1>
+            <p>COS30045 Tutorial 5 — Interactive D3 Visualisations</p>
+        </div>
+        <div class="status-badge">● Live Data Connection</div>
+    </header>
+
+    <div class="dashboard-grid">
+        <!-- 1. Scatter Plot -->
+        <div class="chart-card">
+            <h3>Star Rating vs. Energy Consumption (kWh)</h3>
+            <div id="scatter-chart" class="chart-container"></div>
+        </div>
+
+        <!-- 2. Line Chart -->
+        <div class="chart-card">
+            <h3>Electricity Spot Prices Over Time</h3>
+            <div id="line-chart" class="chart-container"></div>
+        </div>
+
+        <!-- 3. Bar Chart -->
+        <div class="chart-card">
+            <h3>Mean Energy Consumption by Screen Technology</h3>
+            <div id="bar-chart" class="chart-container"></div>
+        </div>
+
+        <!-- 4. Donut Chart -->
+        <div class="chart-card">
+            <h3>Screen Technology Share (55" Models)</h3>
+            <div id="donut-chart" class="chart-container"></div>
+        </div>
+    </div>
+
+    <div id="tooltip" class="d3-tooltip"></div>
+
+    <script>
+        const margin = {top: 25, right: 25, bottom: 50, left: 60},
+              width = 500 - margin.left - margin.right,
+              height = 280 - margin.top - margin.bottom;
+
+        const tooltip = d3.select("#tooltip");
+
+        // Color palette matching screen technology types
+        const techColorScale = d3.scaleOrdinal()
+            .domain(["LCD", "LED", "OLED", "QLED", "LCD (LED)"])
+            .range(["#10b981", "#3b82f6", "#8b5cf6", "#f59e0b", "#06b6d4"]);
+
+        // 1. SCATTER PLOT (Color-coded by Screen Type)
+        d3.csv("CSV/Ex5_TV_energy.csv").then(data => {
+            const svg = d3.select("#scatter-chart")
+                .append("svg")
+                .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+              .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            data.forEach(d => {
+                d.star = +d["Star Rating"];
+                d.energy = +d["Energy Consumption (kWh)"];
+                d.tech = d["Screen Technology"] || d[Object.keys(d)[1]];
+            });
+
+            const x = d3.scaleLinear().domain([0, d3.max(data, d => d.star) + 0.5 || 10]).range([0, width]);
+            const y = d3.scaleLinear().domain([0, d3.max(data, d => d.energy) + 200 || 3000]).range([height, 0]);
+
+            // Gridlines
+            svg.append("g").call(d3.axisLeft(y).tickSize(-width).tickFormat("")).attr("class", "grid-line");
+
+            // Axes
+            svg.append("g").attr("class", "axis").attr("transform", `translate(0,${height})`).call(d3.axisBottom(x));
+            svg.append("g").attr("class", "axis").call(d3.axisLeft(y));
+
+            // Axis Titles
+            svg.append("text")
+               .attr("x", width / 2)
+               .attr("y", height + 38)
+               .attr("fill", "#94a3b8")
+               .attr("font-size", "11px")
+               .attr("text-anchor", "middle")
+               .text("Star Rating (Energy Efficiency)");
+
+            svg.append("text")
+               .attr("transform", "rotate(-90)")
+               .attr("x", -height / 2)
+               .attr("y", -42)
+               .attr("fill", "#94a3b8")
+               .attr("font-size", "11px")
+               .attr("text-anchor", "middle")
+               .text("Annual Energy (kWh)");
+
+            // Plot Points
+            svg.selectAll("circle")
+                .data(data)
+                .enter().append("circle")
+                .attr("cx", d => x(d.star))
+                .attr("cy", d => y(d.energy))
+                .attr("r", 5)
+                .style("fill", d => techColorScale(d.tech))
+                .style("opacity", 0.75)
+                .style("cursor", "pointer")
+                .on("mouseover", (event, d) => {
+                    tooltip.style("opacity", 1)
+                           .html(`<strong>Type:</strong> ${d.tech}<br><strong>Star Rating:</strong> ${d.star}<br><strong>Energy:</strong> ${d.energy} kWh`)
+                           .style("left", (event.pageX + 10) + "px")
+                           .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", () => tooltip.style("opacity", 0));
+        });
+
+        // 2. LINE CHART (Spot Prices over Time)
+        d3.csv("CSV/Ex5_ARE_Spot_Prices.csv").then(data => {
+            const svg = d3.select("#line-chart")
+                .append("svg")
+                .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+              .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            data.forEach((d, i) => {
+                d.index = i;
+                d.price = +d[Object.keys(d)[1]] || 0;
+            });
+
+            const x = d3.scaleLinear().domain([0, data.length - 1]).range([0, width]);
+            const y = d3.scaleLinear().domain([0, d3.max(data, d => d.price) * 1.1 || 100]).range([height, 0]);
+
+            svg.append("g").attr("class", "axis").attr("transform", `translate(0,${height})`).call(d3.axisBottom(x).ticks(6));
+            svg.append("g").attr("class", "axis").call(d3.axisLeft(y));
+
+            const gradient = svg.append("defs").append("linearGradient")
+                .attr("id", "line-gradient")
+                .attr("x1", "0%").attr("y1", "0%")
+                .attr("x2", "0%").attr("y2", "100%");
+
+            gradient.append("stop").attr("offset", "0%").attr("stop-color", "#3b82f6").attr("stop-opacity", 0.4);
+            gradient.append("stop").attr("offset", "100%").attr("stop-color", "#3b82f6").attr("stop-opacity", 0);
+
+            const area = d3.area().x(d => x(d.index)).y0(height).y1(d => y(d.price));
+            const line = d3.line().x(d => x(d.index)).y(d => y(d.price));
+
+            svg.append("path").datum(data).attr("fill", "url(#line-gradient)").attr("d", area);
+            svg.append("path").datum(data).attr("fill", "none").attr("stroke", "#3b82f6").attr("stroke-width", 2.5).attr("d", line);
+        });
+
+        // 3. BAR CHART (Mean Energy Consumption)
+        d3.csv("CSV/Ex5_TV_energy_Allsizes_byScreenType.csv").then(data => {
+            const svg = d3.select("#bar-chart")
+                .append("svg")
+                .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+              .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+
+            data.forEach(d => {
+                d.tech = d[Object.keys(d)[0]];
+                d.meanEnergy = +d[Object.keys(d)[1]] || 0;
+            });
+
+            const x = d3.scaleBand().domain(data.map(d => d.tech)).range([0, width]).padding(0.35);
+            const y = d3.scaleLinear().domain([0, d3.max(data, d => d.meanEnergy) * 1.15 || 500]).range([height, 0]);
+
+            svg.append("g").attr("class", "axis").attr("transform", `translate(0,${height})`).call(d3.axisBottom(x));
+            svg.append("g").attr("class", "axis").call(d3.axisLeft(y));
+
+            svg.selectAll("rect")
+                .data(data)
+                .enter().append("rect")
+                .attr("x", d => x(d.tech))
+                .attr("y", d => y(d.meanEnergy))
+                .attr("width", x.bandwidth())
+                .attr("height", d => height - y(d.meanEnergy))
+                .attr("rx", 6)
+                .style("fill", d => techColorScale(d.tech))
+                .style("cursor", "pointer")
+                .on("mouseover", function(event, d) {
+                    d3.select(this).style("opacity", 0.8);
+                    tooltip.style("opacity", 1)
+                           .html(`<strong>${d.tech}:</strong> ${Math.round(d.meanEnergy)} kWh/year`)
+                           .style("left", (event.pageX + 10) + "px")
+                           .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function() {
+                    d3.select(this).style("opacity", 1);
+                    tooltip.style("opacity", 0);
+                });
+        });
+
+        // 4. DONUT CHART (With Embedded Legend)
+        d3.csv("CSV/Ex5_TV_energy_55inchtv_byScreenType.csv").then(data => {
+            const radius = Math.min(width, height) / 2 - 10;
+            const svg = d3.select("#donut-chart")
+                .append("svg")
+                .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+              .append("g")
+                .attr("transform", `translate(${(width + margin.left + margin.right) / 2 - 40}, ${(height + margin.top + margin.bottom) / 2})`);
+
+            data.forEach(d => {
+                d.tech = d[Object.keys(d)[0]];
+                d.value = +d[Object.keys(d)[1]] || 1;
+            });
+
+            const pie = d3.pie().value(d => d.value);
+            const arc = d3.arc().innerRadius(radius * 0.55).outerRadius(radius).cornerRadius(6);
+
+            svg.selectAll("path")
+                .data(pie(data))
+                .enter().append("path")
+                .attr("d", arc)
+                .attr("fill", d => techColorScale(d.data.tech))
+                .style("stroke", "#1e293b")
+                .style("stroke-width", "3px");
+
+            // Donut Legend
+            const legend = svg.append("g").attr("transform", `translate(${radius + 20}, ${-radius / 2})`);
+            data.forEach((d, i) => {
+                const legendRow = legend.append("g").attr("transform", `translate(0, ${i * 22})`);
+                legendRow.append("rect").attr("width", 12).attr("height", 12).attr("rx", 3).attr("fill", techColorScale(d.tech));
+                legendRow.append("text").attr("x", 20).attr("y", 10).attr("fill", "#94a3b8").attr("font-size", "11px").text(d.tech);
+            });
+        });
+    </script>
+</body>
+</html>
